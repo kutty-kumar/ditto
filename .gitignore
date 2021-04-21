@@ -1,0 +1,11 @@
+bin
+.idea
+.docker-*
+.push-*
+vendor/
+.git
+*.log
+*.iml
+.DS_STORE/
+docker/db/data
+docker/_data

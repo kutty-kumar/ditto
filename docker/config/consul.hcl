@@ -1,0 +1,1 @@
+bind_addr = "GetAllInterfaces | include \"network\" \"10.17.0.0/24\ | sort \"size,address\" | attr \"address\" "
