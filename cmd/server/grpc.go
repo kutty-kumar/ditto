@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
 	"ditto/pkg/domain"
 	"ditto/pkg/svc"
+	"log"
+	"os"
+	"time"
+
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcLogrus "github.com/grpc-ecosystem/go-grpc-middleware/logging/logrus"
 	grpcValidator "github.com/grpc-ecosystem/go-grpc-middleware/validator"
@@ -15,18 +20,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gLogger "gorm.io/gorm/logger"
-	"log"
-	"os"
-	"time"
 )
 
 var (
-	reg = prometheus.NewRegistry()
-	grpcMetrics = grpcPrometheus.NewServerMetrics()
+	reg                     = prometheus.NewRegistry()
+	grpcMetrics             = grpcPrometheus.NewServerMetrics()
 	createUserSuccessMetric = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "user_service_create_user_success_count",
 		Help: "total number of successful invocations of create user method in user service",
@@ -37,7 +42,7 @@ var (
 	}, []string{"create_user_failure_count"})
 )
 
-func init(){
+func init() {
 	reg.MustRegister(grpcMetrics, createUserSuccessMetric, createUserFailureMetric)
 	createUserSuccessMetric.WithLabelValues("user_service")
 	createUserFailureMetric.WithLabelValues("user_service")
@@ -67,18 +72,19 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 
 				// collection operators middleware
 				gateway.UnaryServerInterceptor(),
+
+				AuthUnaryServerInterceptor(),
 			),
 		),
 	)
 
-
 	dbLogger := gLogger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
 		gLogger.Config{
-			SlowThreshold:              time.Second,   // Slow SQL threshold
-			LogLevel:                   gLogger.Info, // Log level
-			IgnoreRecordNotFoundError: true,           // Ignore ErrRecordNotFound error for logger
-			Colorful:                  false,          // Disable color
+			SlowThreshold:             time.Second,  // Slow SQL threshold
+			LogLevel:                  gLogger.Info, // Log level
+			IgnoreRecordNotFoundError: true,         // Ignore ErrRecordNotFound error for logger
+			Colorful:                  false,        // Disable color
 		},
 	)
 	// create new mysql database connection
@@ -90,14 +96,14 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 	//dropTables(db)
 	createTables(db)
 	baseDao := pkg.NewBaseGORMDao(pkg.WithDb(db),
-		                          pkg.WithLogger(logger),
-		                          pkg.WithCreator(func() pkg.Base {
-		                          	return &domain.Printer{}
-		                          }),
-	                             pkg.WithExternalIdSetter(func(externalId string, base pkg.Base) pkg.Base {
-									base.SetExternalId(externalId)
-									return base
-								}))
+		pkg.WithLogger(logger),
+		pkg.WithCreator(func() pkg.Base {
+			return &domain.Printer{}
+		}),
+		pkg.WithExternalIdSetter(func(externalId string, base pkg.Base) pkg.Base {
+			base.SetExternalId(externalId)
+			return base
+		}))
 	baseSvc := pkg.NewBaseSvc(baseDao)
 	printerSvc := svc.NewPrinterSvc(&baseSvc)
 	ditto_v1.RegisterPrinterServiceServer(grpcServer, printerSvc)
@@ -109,5 +115,27 @@ func createTables(db *gorm.DB) {
 	err := db.AutoMigrate(domain.Printer{})
 	if err != nil {
 		log.Fatalf("An error %v occurred while automigrating", err)
+	}
+}
+
+func AuthUnaryServerInterceptor() grpc.UnaryServerInterceptor {
+
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+
+		headers, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Errorf(codes.Unknown, "Internal server error")
+		}
+		if headers.Len() != 0 && headers.Get("Authorization") != nil {
+
+			return handler(ctx, req)
+		}
+
+		if headers.Len() != 0 && headers.Get("Authorization") == nil {
+			return nil, status.Errorf(codes.Unknown, "Authorization failed")
+
+		}
+
+		return handler(ctx, req)
 	}
 }
