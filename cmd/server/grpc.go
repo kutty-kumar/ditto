@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"ditto/pkg/domain"
+	"ditto/pkg/repository"
 	"ditto/pkg/svc"
 	"github.com/dgrijalva/jwt-go"
 	"log"
@@ -111,8 +112,9 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 			base.SetExternalId(externalId)
 			return base
 		}))
+	printerDao := repository.NewPrinterGORMRepository(baseDao)
 	baseSvc := pkg.NewBaseSvc(baseDao)
-	printerSvc := svc.NewPrinterSvc(&baseSvc)
+	printerSvc := svc.NewPrinterSvc(&baseSvc, printerDao)
 	ditto_v1.RegisterPrinterServiceServer(grpcServer, printerSvc)
 	grpcMetrics.InitializeMetrics(grpcServer)
 	return grpcServer, nil

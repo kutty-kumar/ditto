@@ -12,8 +12,14 @@ type PrinterRepository interface {
 	DeletePrinter(ctx context.Context, userId string, printerId string) (*domain.Printer, error)
 }
 
+func NewPrinterGORMRepository(dao pkg.BaseDao) PrinterRepository {
+	return &PrinterGORMRepository{
+		dao,
+	}
+}
+
 type PrinterGORMRepository struct {
-	pkg.GORMRepository
+	pkg.BaseDao
 }
 
 func (p *PrinterGORMRepository) GetPrintersByUserId(ctx context.Context, userId string) ([]*domain.Printer, error) {
