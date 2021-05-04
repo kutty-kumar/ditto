@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"ditto/pkg/domain"
+	"ditto/pkg/repository"
 	"ditto/pkg/svc"
+	"github.com/dgrijalva/jwt-go"
 	"log"
 	"os"
 	"time"
@@ -41,6 +43,12 @@ var (
 		Help: "total number of failure invocations of create user method in user service",
 	}, []string{"create_user_failure_count"})
 )
+
+type Claims struct {
+	UserName string `json:"user_name"`
+	UserId   string `json:"user_id"`
+	jwt.StandardClaims
+}
 
 func init() {
 	reg.MustRegister(grpcMetrics, createUserSuccessMetric, createUserFailureMetric)
@@ -104,8 +112,9 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 			base.SetExternalId(externalId)
 			return base
 		}))
+	printerDao := repository.NewPrinterGORMRepository(baseDao)
 	baseSvc := pkg.NewBaseSvc(baseDao)
-	printerSvc := svc.NewPrinterSvc(&baseSvc)
+	printerSvc := svc.NewPrinterSvc(&baseSvc, printerDao)
 	ditto_v1.RegisterPrinterServiceServer(grpcServer, printerSvc)
 	grpcMetrics.InitializeMetrics(grpcServer)
 	return grpcServer, nil
@@ -123,15 +132,25 @@ func AuthUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		headers, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			return nil, status.Errorf(codes.Unknown, "Internal server error")
+			return nil, status.Errorf(codes.InvalidArgument, "headers absent")
 		}
 		if headers.Len() != 0 && headers.Get("Authorization") != nil {
+			claims := &Claims{}
+			tkn, err := jwt.ParseWithClaims(headers.Get("Authorization")[0], claims, func(token *jwt.Token) (i interface{}, e error) {
+				return viper.GetString("server_config.jwt_key"), nil
+			})
+			if err != nil {
+				return nil, status.Errorf(codes.PermissionDenied, "invalid signature")
+			}
+			if !tkn.Valid {
+				return nil, status.Errorf(codes.Unauthenticated, "unauthorized")
+			}
+			metadata.AppendToOutgoingContext(ctx, "user_id", claims.UserId)
 			return handler(ctx, req)
 		}
 
 		if headers.Len() != 0 && headers.Get("Authorization") == nil {
-			return nil, status.Errorf(codes.Unknown, "Authorization failed")
-
+			return nil, status.Errorf(codes.Unauthenticated, "auth failure")
 		}
 
 		return handler(ctx, req)

@@ -260,6 +260,8 @@ github.com/kutty-kumar/charminder v0.0.0-20210421024119-061575cacd34 h1:tiu+VHyu
 github.com/kutty-kumar/charminder v0.0.0-20210421024119-061575cacd34/go.mod h1:eseYyPQvJ7D37bJH7jyTRyW1LgOV8p3UHneBccNtMPQ=
 github.com/kutty-kumar/ho_oh v0.0.0-20210421132238-c9603c6881fc h1:E3FDysdXBdkEyb7EGphW5UFtnX9olbS55twtgpXX/S8=
 github.com/kutty-kumar/ho_oh v0.0.0-20210421132238-c9603c6881fc/go.mod h1:UaCBpd8U96ua4WPiW8tKCiQfyN7KRGThWOscg5boCDs=
+github.com/kutty-kumar/ho_oh v0.0.0-20210503032940-82255e4583a9 h1:wtoybidgvhgaZ7NoYbv9+vTrY5IoW/OvbICVeGFLYP0=
+github.com/kutty-kumar/ho_oh v0.0.0-20210503032940-82255e4583a9/go.mod h1:UaCBpd8U96ua4WPiW8tKCiQfyN7KRGThWOscg5boCDs=
 github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20190605223551-bc2310a04743/go.mod h1:qklhhLq1aX+mtWk9cPHPzaBjWImj5ULL6C7HFJtXQMM=
 github.com/lightstep/lightstep-tracer-go v0.18.1/go.mod h1:jlF1pusYV4pidLvZ+XD0UBX0ZE6WURAspgAczcDHrL4=
 github.com/lyft/protoc-gen-validate v0.0.13/go.mod h1:XbGvPuh87YZc5TdIa2/I4pLk0QoUACkjt2znoq26NVQ=
