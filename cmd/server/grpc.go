@@ -94,7 +94,7 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 	}
 
 	//dropTables(db)
-	createTables(db)
+	//createTables(db)
 	baseDao := pkg.NewBaseGORMDao(pkg.WithDb(db),
 		pkg.WithLogger(logger),
 		pkg.WithCreator(func() pkg.Base {
@@ -121,13 +121,11 @@ func createTables(db *gorm.DB) {
 func AuthUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-
 		headers, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
 			return nil, status.Errorf(codes.Unknown, "Internal server error")
 		}
 		if headers.Len() != 0 && headers.Get("Authorization") != nil {
-
 			return handler(ctx, req)
 		}
 
