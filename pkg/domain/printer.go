@@ -51,6 +51,7 @@ func (p *Printer) ToDto() interface{} {
 		SerialNumber:  p.SerialNumber,
 		ProductNumber: p.ProductNumber,
 		Status:        core_v1.Status(p.Status),
+		UserId:        p.UserId,
 	}
 }
 
@@ -72,10 +73,13 @@ func (p *Printer) Merge(other interface{}) {
 	if otherPrinter.Description != "" {
 		p.Description = otherPrinter.Description
 	}
+	if otherPrinter.Status != 0 {
+		p.Status = otherPrinter.Status
+	}
 }
 
 func (p *Printer) FromSqlRow(rows *sql.Rows) (pkg.Base, error) {
-	err := rows.Scan(&p.ExternalId, &p.Id, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt, &p.Status, &p.Name, &p.UserId, &p.SerialNumber, &p.ProductNumber,  &p.Description)
+	err := rows.Scan(&p.ExternalId, &p.Id, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt, &p.Status, &p.Name, &p.UserId, &p.SerialNumber, &p.ProductNumber, &p.Description)
 	if err != nil {
 		return nil, err
 	}

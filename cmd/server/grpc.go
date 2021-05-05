@@ -6,8 +6,10 @@ import (
 	"ditto/pkg/repository"
 	"ditto/pkg/svc"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/kutty-kumar/charminder/pkg/util"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -102,7 +104,7 @@ func NewGRPCServer(logger *logrus.Logger) (*grpc.Server, error) {
 	}
 
 	//dropTables(db)
-	//createTables(db)
+	createTables(db)
 	baseDao := pkg.NewBaseGORMDao(pkg.WithDb(db),
 		pkg.WithLogger(logger),
 		pkg.WithCreator(func() pkg.Base {
@@ -135,18 +137,16 @@ func AuthUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 			return nil, status.Errorf(codes.InvalidArgument, "headers absent")
 		}
 		if headers.Len() != 0 && headers.Get("Authorization") != nil {
-			claims := &Claims{}
-			tkn, err := jwt.ParseWithClaims(headers.Get("Authorization")[0], claims, func(token *jwt.Token) (i interface{}, e error) {
-				return viper.GetString("server_config.jwt_key"), nil
-			})
-			if err != nil {
+			bearerTkn := headers.Get("Authorization")[0]
+			if strings.Contains(bearerTkn, "Bearer ") || strings.Contains(bearerTkn, "bearer ") {
+				bearerTkn = bearerTkn[7:]
+			}
+			claims, valid := util.ValidateTokenExpiry(viper.GetString("jwt_config.secret_key"), bearerTkn)
+			if !valid {
 				return nil, status.Errorf(codes.PermissionDenied, "invalid signature")
 			}
-			if !tkn.Valid {
-				return nil, status.Errorf(codes.Unauthenticated, "unauthorized")
-			}
-			metadata.AppendToOutgoingContext(ctx, "user_id", claims.UserId)
-			return handler(ctx, req)
+			childCtx := context.WithValue(ctx, "user", map[string]string{"user_id": claims.UserId})
+			return handler(childCtx, req)
 		}
 
 		if headers.Len() != 0 && headers.Get("Authorization") == nil {

@@ -30,6 +30,7 @@ func (p *PrinterSvc) ToDto(printer *domain.Printer) ditto.PrinterDto {
 func (p *PrinterSvc) CreatePrinter(ctx context.Context, request *ditto.CreatePrinterRequest) (*ditto.CreatePrinterResponse, error) {
 	printer := domain.Printer{}
 	printer.FillProperties(request.Request)
+	printer.UserId = ctx.Value("user").(map[string]string)["user_id"]
 	err, cPrinter := p.Create(ctx, &printer)
 	if err != nil {
 		return nil, err
@@ -72,7 +73,7 @@ func (p *PrinterSvc) MultiGetPrintersByExternalId(ctx context.Context, request *
 }
 
 func (p *PrinterSvc) MultiGetPrintersForUser(ctx context.Context, req *ditto.NoOpRequest) (*ditto.MultiGetPrintersByExternalIdResponse, error) {
-	userId := ctx.Value("user_id").(string)
+	userId := ctx.Value("user").(map[string]string)["user_id"]
 	if len(userId) > 0 {
 		printers, err := p.Repository.GetPrintersByUserId(ctx, userId)
 		if err != nil {
@@ -89,7 +90,7 @@ func (p *PrinterSvc) MultiGetPrintersForUser(ctx context.Context, req *ditto.NoO
 }
 
 func (p *PrinterSvc) DeletePrinter(ctx context.Context, req *ditto.DeletePrinterRequest) (*ditto.UpdatePrinterResponse, error) {
-	userId := ctx.Value("user_id").(string)
+	userId := ctx.Value("user").(map[string]string)["user_id"]
 	if len(userId) > 0 {
 		updatedPrinter, err := p.Repository.DeletePrinter(ctx, userId, req.PrinterId)
 		if err != nil {
