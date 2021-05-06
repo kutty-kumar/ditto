@@ -152,7 +152,7 @@ func AuthUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 		if headers.Len() != 0 && headers.Get("Authorization") == nil {
 			return nil, status.Errorf(codes.Unauthenticated, "auth failure")
 		}
-
+		ctx.
 		return handler(ctx, req)
 	}
 }
