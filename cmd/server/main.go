@@ -7,16 +7,15 @@ import (
 	"github.com/golang/protobuf/proto"
 	grpcPrometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"github.com/infobloxopen/atlas-app-toolkit/gateway"
 	"github.com/infobloxopen/atlas-app-toolkit/gorm/resource"
 	"github.com/infobloxopen/atlas-app-toolkit/health"
-	"github.com/infobloxopen/atlas-app-toolkit/requestid"
 	"github.com/infobloxopen/atlas-app-toolkit/server"
 	"github.com/kutty-kumar/ho_oh/ditto_v1"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	_ "github.com/spf13/viper/remote"
+	"google.golang.org/grpc"
 	"log"
 	"net"
 	"net/http"
@@ -34,15 +33,60 @@ func main() {
 	doneC := make(chan error)
 	logger := NewLogger()
 
-	if viper.GetBool("server_config.internal_enable") {
-		go func() { doneC <- ServeInternal(logger) }()
-	}
-
 	go func() { doneC <- ServeExternal(logger) }()
+
+	go func() { doneC <- ServeHttp(logger) }()
 
 	if err := <-doneC; err != nil {
 		logger.Fatal(err)
 	}
+}
+
+func newGateway(ctx context.Context) (http.Handler, error) {
+	opts := []grpc.DialOption{grpc.WithInsecure()}
+	gwMux := runtime.NewServeMux()
+	if err := ditto_v1.RegisterPrinterServiceHandlerFromEndpoint(ctx, gwMux, fmt.Sprintf("%v:%v", viper.GetString("server_config.address"), viper.GetString("server_config.port")), opts); err != nil {
+		return nil, err
+	}
+	return gwMux, nil
+}
+
+func preflightHandler(w http.ResponseWriter, r *http.Request) {
+	headers := []string{"Content-Type", "Accept"}
+	w.Header().Set("Access-Control-Allow-Headers", strings.Join(headers, ","))
+	methods := []string{"GET", "HEAD", "POST", "PUT", "DELETE"}
+	w.Header().Set("Access-Control-Allow-Methods", strings.Join(methods, ","))
+	return
+}
+
+// allowCORS allows Cross Origin Resource Sharing from any origin.
+// Don't do this without consideration in production systems.
+func allowCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origin := r.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			if r.Method == "OPTIONS" && r.Header.Get("Access-Control-Request-Method") != "" {
+				preflightHandler(w, r)
+				return
+			}
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+func ServeHttp(logger *logrus.Logger) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	gwMux, err := newGateway(ctx)
+	if err != nil {
+		return err
+	}
+	gMux := http.NewServeMux()
+	gMux.Handle("/", gwMux)
+	err = http.ListenAndServe(fmt.Sprintf("%s:%s", viper.GetString("server_config.gateway_address"), viper.GetString("server_config.gateway_port")), allowCORS(gMux))
+	logger.Debugf("serving internal http at %q", fmt.Sprintf("%s:%s", viper.GetString("server_config.gateway_address"), viper.GetString("server_config.gateway_port")))
+	return err
 }
 
 func NewLogger() *logrus.Logger {
@@ -118,15 +162,6 @@ func ServeExternal(logger *logrus.Logger) error {
 
 	s, err := server.NewServer(
 		server.WithGrpcServer(grpcServer),
-		server.WithGateway(
-			gateway.WithGatewayOptions(
-				runtime.WithForwardResponseOption(forwardResponseOption),
-				runtime.WithIncomingHeaderMatcher(gateway.ExtendedDefaultHeaderMatcher(
-					requestid.DefaultRequestIDKey)),
-			),
-			gateway.WithServerAddress(fmt.Sprintf("%s:%s", viper.GetString("server_config.address"), viper.GetString("server_config.port"))),
-			gateway.WithEndpointRegistration(viper.GetString("server_config.gateway_url"), ditto_v1.RegisterPrinterServiceHandlerFromEndpoint),
-		),
 	)
 	if err != nil {
 		logger.Fatalln(err)
@@ -137,15 +172,9 @@ func ServeExternal(logger *logrus.Logger) error {
 		logger.Fatalln(err)
 	}
 
-	httpL, err := net.Listen("tcp", fmt.Sprintf("%s:%s", viper.GetString("server_config.gateway_address"), viper.GetString("server_config.gateway_port")))
-	if err != nil {
-		logger.Fatalln(err)
-	}
-
 	logger.Printf("serving gRPC at %s:%s", viper.GetString("server_config.address"), viper.GetString("server_config.port"))
-	logger.Printf("serving http at %s:%s", viper.GetString("server_config.gateway_address"), viper.GetString("server_config.gateway_port"))
 
-	return s.Serve(grpcL, httpL)
+	return s.Serve(grpcL, nil)
 }
 
 func init() {
